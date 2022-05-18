@@ -8,24 +8,6 @@ variable "service_name" {
   description = "ECS Service Name"
 }
 
-variable "github_oauth_token" {
-  type        = string
-  description = "GitHub OAuth Token with permissions to access private repositories"
-  default     = ""
-}
-
-variable "github_webhooks_token" {
-  type        = string
-  default     = ""
-  description = "GitHub OAuth Token with permissions to create webhooks. If not provided, can be sourced from the `GITHUB_TOKEN` environment variable"
-}
-
-variable "github_webhook_events" {
-  type        = list(string)
-  description = "A list of events which should trigger the webhook. See a list of [available events](https://developer.github.com/v3/activity/events/types/)"
-  default     = ["push"]
-}
-
 variable "repo_owner" {
   type        = string
   description = "GitHub Organization or Username"

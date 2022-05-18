@@ -206,42 +206,8 @@ data "aws_caller_identity" "default" {
 data "aws_region" "default" {
 }
 
-module "codebuild" {
-  source                                = "cloudposse/codebuild/aws"
-  version                               = "0.37.1"
-  build_image                           = var.build_image
-  build_compute_type                    = var.build_compute_type
-  build_timeout                         = var.build_timeout
-  buildspec                             = var.buildspec
-  delimiter                             = module.this.delimiter
-  attributes                            = ["build"]
-  privileged_mode                       = var.privileged_mode
-  aws_region                            = var.region != "" ? var.region : data.aws_region.default.name
-  aws_account_id                        = var.aws_account_id != "" ? var.aws_account_id : data.aws_caller_identity.default.account_id
-  image_repo_name                       = var.image_repo_name
-  image_tag                             = var.image_tag
-  github_token                          = var.github_oauth_token
-  environment_variables                 = var.environment_variables
-  badge_enabled                         = var.badge_enabled
-  cache_type                            = var.cache_type
-  local_cache_modes                     = var.local_cache_modes
-  secondary_artifact_location           = var.secondary_artifact_bucket_id
-  secondary_artifact_identifier         = var.secondary_artifact_identifier
-  secondary_artifact_encryption_enabled = var.secondary_artifact_encryption_enabled
-  vpc_config                            = var.codebuild_vpc_config
-  cache_bucket_suffix_enabled           = var.cache_bucket_suffix_enabled
-
-  context = module.this.context
-}
-
-resource "aws_iam_role_policy_attachment" "codebuild_s3" {
-  count      = module.this.enabled ? 1 : 0
-  role       = module.codebuild.role_id
-  policy_arn = join("", aws_iam_policy.s3.*.arn)
-}
-
 resource "aws_codepipeline" "default" {
-  count    = module.this.enabled && var.github_oauth_token != "" ? 1 : 0
+  count    = module.this.enabled != "" ? 1 : 0
   name     = module.codepipeline_label.id
   role_arn = join("", aws_iam_role.default.*.arn)
 
@@ -256,43 +222,20 @@ resource "aws_codepipeline" "default" {
     aws_iam_role_policy_attachment.codebuild,
     aws_iam_role_policy_attachment.codebuild_s3
   ]
-
   stage {
     name = "Source"
 
     action {
-      name             = "Source"
+      name             = "ImageSource"
       category         = "Source"
-      owner            = "ThirdParty"
-      provider         = "GitHub"
+      owner            = "AWS"
+      provider         = "ECR"
       version          = "1"
-      output_artifacts = ["code"]
+      output_artifacts = ["SourceArtifact"]
 
       configuration = {
-        OAuthToken           = var.github_oauth_token
-        Owner                = var.repo_owner
-        Repo                 = var.repo_name
-        Branch               = var.branch
-        PollForSourceChanges = var.poll_source_changes
-      }
-    }
-  }
-
-  stage {
-    name = "Build"
-
-    action {
-      name     = "Build"
-      category = "Build"
-      owner    = "AWS"
-      provider = "CodeBuild"
-      version  = "1"
-
-      input_artifacts  = ["code"]
-      output_artifacts = ["task"]
-
-      configuration = {
-        ProjectName = module.codebuild.project_name
+        RepositoryName = var.repo_name
+        ImageTag       = "latest"
       }
     }
   }
@@ -305,7 +248,7 @@ resource "aws_codepipeline" "default" {
       category        = "Deploy"
       owner           = "AWS"
       provider        = "ECS"
-      input_artifacts = ["task"]
+      input_artifacts = ["SourceArtifact"]
       version         = "1"
 
       configuration = {
@@ -344,37 +287,16 @@ resource "aws_codepipeline" "bitbucket" {
     name = "Source"
 
     action {
-      name             = "Source"
+      name             = "ImageSource"
       category         = "Source"
       owner            = "AWS"
-      provider         = "CodeStarSourceConnection"
+      provider         = "ECR"
       version          = "1"
-      output_artifacts = ["code"]
+      output_artifacts = ["SourceArtifact"]
 
       configuration = {
-        ConnectionArn        = var.codestar_connection_arn
-        FullRepositoryId     = format("%s/%s", var.repo_owner, var.repo_name)
-        BranchName           = var.branch
-        OutputArtifactFormat = "CODE_ZIP"
-      }
-    }
-  }
-
-  stage {
-    name = "Build"
-
-    action {
-      name     = "Build"
-      category = "Build"
-      owner    = "AWS"
-      provider = "CodeBuild"
-      version  = "1"
-
-      input_artifacts  = ["code"]
-      output_artifacts = ["task"]
-
-      configuration = {
-        ProjectName = module.codebuild.project_name
+        RepositoryName = var.repo_name
+        ImageTag       = "latest"
       }
     }
   }
@@ -387,7 +309,7 @@ resource "aws_codepipeline" "bitbucket" {
       category        = "Deploy"
       owner           = "AWS"
       provider        = "ECS"
-      input_artifacts = ["task"]
+      input_artifacts = ["SourceArtifact"]
       version         = "1"
 
       configuration = {
